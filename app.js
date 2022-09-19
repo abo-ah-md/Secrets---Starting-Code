@@ -8,6 +8,7 @@ const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
 const LocalStrategy = require("passport-local").Strategy;
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const GitHubStrategy = require("passport-github2").Strategy
 const findOrCreate = require("mongoose-findorcreate");
 
 
@@ -42,6 +43,8 @@ mongoose.connect("mongodb://localhost:27017/UsersDB");
 const UserSchema = new mongoose.Schema({
   email: String,
   password: String,
+  googleId: String,
+  secret: String
 });
 
 UserSchema.plugin(passportLocalMongoose);
@@ -56,29 +59,34 @@ const User = mongoose.model("User", UserSchema);
 passport.use(User.createStrategy());
 
 passport.serializeUser(function (user, done) {
-  done(null, user);
+  done(null, user.id);
 });
 
-passport.deserializeUser(function (user, done) {
-  done(null, user);
+passport.deserializeUser(function (id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
 });
+})
 
 
 
 passport.use(new GoogleStrategy({
-  clientID: process.env.GOOGLE_CLIENT_ID,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  scope: 'profile',
-  callbackURL: "http://localhost:3000/auth/google/secrets"
-},
-function(accessToken, refreshToken, profile, cb) {
-  User.findOrCreate({ googleId: profile.id }, function (err, user) {
-    
-    return cb(err, user);
-  });
+  clientID: process.env.CLIENT_ID,
+  clientSecret: process.env.CLIENT_SECRET,
+  callbackURL: "http://localhost:3000/auth/google/secrets",
+  userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
   
+},
+ async function  (accessToken, refreshToken, profile, cb) {
+  try{
+  await User.findOrCreate({ googleId: profile.id },  function  (err, user,) {
+    if (err) {
+      console.log(err);
+    }
+    return cb(err, user);
+  }); 
+}catch(err){console.log(err);}
 }
-
 ));
 
 
@@ -86,7 +94,17 @@ function(accessToken, refreshToken, profile, cb) {
 
 
 
-
+passport.use(new GitHubStrategy({
+  clientID: GITHUB_CLIENT_ID,
+  clientSecret: GITHUB_CLIENT_SECRET,
+  callbackURL: "http://127.0.0.1:3000/auth/github/callback"
+},
+function(accessToken, refreshToken, profile, done) {
+  User.findOrCreate({ githubId: profile.id }, function (err, user) {
+    return done(err, user);
+  });
+}
+));
 
 
 
@@ -98,11 +116,16 @@ app.get("/", (req, res) => {
   res.render("home");
 });
 
+app.get("/auth/google",
+  passport.authenticate('google', { scope: ["profile"] })
+);
 
-app.get("/auth/google",(req,res)=>{
-
-  passport.authenticate('google', { scope: ['profile'] });
-})
+app.get("/auth/google/secrets",
+  passport.authenticate('google', { failureRedirect: "/login" }),
+  function(req, res) {
+    // Successful authentication, redirect to secrets.
+    res.redirect("/secrets");
+  });
 
 app.get("/logout", (req, res) => {
   req.logout((err) => {
