@@ -94,17 +94,7 @@ passport.use(new GoogleStrategy({
 
 
 
-passport.use(new GitHubStrategy({
-  clientID: GITHUB_CLIENT_ID,
-  clientSecret: GITHUB_CLIENT_SECRET,
-  callbackURL: "http://127.0.0.1:3000/auth/github/callback"
-},
-function(accessToken, refreshToken, profile, done) {
-  User.findOrCreate({ githubId: profile.id }, function (err, user) {
-    return done(err, user);
-  });
-}
-));
+
 
 
 
@@ -137,11 +127,37 @@ app.get("/logout", (req, res) => {
 });
 
 app.get("/secrets", async (req, res, next) => {
+ User.find({"secret":{$ne:null}},(err,foundUser)=>{
+  if (err) {
+    console.log(err);
+  }else {
+    console.log(foundUser);
+      res.render("secrets",{usersecret:foundUser});
+  }
+ })
+});
+
+app.get("/submit",(req,res)=>{
   if (req.isAuthenticated()) {
-    res.render("secrets");
+    res.render("submit");
   } else {
     res.redirect("/login");
   }
+})
+app.post("/submit",(req,res)=>{
+
+
+ const submetedSecrets= req.body.secret;
+ User.findById(req.user.id,(err,foundUser)=>{
+  if (err) {
+    console.log(err);
+  }else {
+    if (foundUser){
+    foundUser.secret= submetedSecrets;
+    foundUser.save(()=>{res.redirect("/secrets")});
+    };
+  };
+ });
 });
 
 app.get("/login", (req, res) => {
